@@ -1,8 +1,12 @@
-# On-demand only: run from Actions → "Run workflow"
-# (no daily schedule)
+# Telegram on-demand:
+#   Send /신호 or /signal to the bot → this job picks it up (usually within ~5 min)
+# Also runnable manually from Actions → Run workflow
 name: KCM Signal Now
 
 on:
+  schedule:
+    # Poll Telegram for /신호 requests
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -15,8 +19,13 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: pip install -q yfinance pandas numpy requests
-      - name: Send Telegram
+      - name: Handle request
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python notify_kcm_telegram.py
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python notify_kcm_telegram.py
+          else
+            python telegram_poll_and_notify.py
+          fi
