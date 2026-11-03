@@ -1,10 +1,8 @@
-# Runs after US market close (weekdays).
-# Approx: 21:30 UTC = 06:30 KST next day (EDT); still after close in EST too.
-name: KCM Daily Telegram
+# On-demand only: run from Actions → "Run workflow"
+# (no daily schedule)
+name: KCM Signal Now
 
 on:
-  schedule:
-    - cron: "30 21 * * 1-5"
   workflow_dispatch: {}
 
 jobs:
