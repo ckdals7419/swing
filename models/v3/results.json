@@ -1,0 +1,123 @@
+{
+  "Basic Materials": {
+    "n_train": 84608,
+    "n_val": 8228,
+    "n_test": 18379,
+    "val_auc": 0.6119,
+    "test_auc": 0.5461,
+    "val_ic": 0.1612,
+    "test_ic": 0.0178,
+    "val_ls": 0.0,
+    "test_ls": -0.0033
+  },
+  "Communication Services": {
+    "n_train": 77161,
+    "n_val": 8300,
+    "n_test": 19883,
+    "val_auc": 0.6134,
+    "test_auc": 0.5068,
+    "val_ic": 0.1152,
+    "test_ic": 0.0019,
+    "val_ls": -0.0002,
+    "test_ls": -0.0062
+  },
+  "Consumer Cyclical": {
+    "n_train": 232683,
+    "n_val": 22422,
+    "n_test": 46494,
+    "val_auc": 0.6113,
+    "test_auc": 0.5526,
+    "val_ic": 0.1446,
+    "test_ic": -0.0008,
+    "val_ls": 0.0009,
+    "test_ls": 0.0017
+  },
+  "Consumer Defensive": {
+    "n_train": 189194,
+    "n_val": 15154,
+    "n_test": 34541,
+    "val_auc": 0.612,
+    "test_auc": 0.5353,
+    "val_ic": 0.06,
+    "test_ic": 0.0365,
+    "val_ls": 0.0007,
+    "test_ls": -0.0005
+  },
+  "Energy": {
+    "n_train": 126563,
+    "n_val": 8545,
+    "n_test": 20397,
+    "val_auc": 0.5676,
+    "test_auc": 0.533,
+    "val_ic": 0.0972,
+    "test_ic": 0.0267,
+    "val_ls": 0.0142,
+    "test_ls": 0.0004
+  },
+  "Financial Services": {
+    "n_train": 284766,
+    "n_val": 21777,
+    "n_test": 50692,
+    "val_auc": 0.6137,
+    "test_auc": 0.5658,
+    "val_ic": -0.0865,
+    "test_ic": -0.1006,
+    "val_ls": -0.001,
+    "test_ls": 0.0003
+  },
+  "Healthcare": {
+    "n_train": 186574,
+    "n_val": 20990,
+    "n_test": 49519,
+    "val_auc": 0.5886,
+    "test_auc": 0.5487,
+    "val_ic": 0.1287,
+    "test_ic": 0.0518,
+    "val_ls": 0.006,
+    "test_ls": -0.0005
+  },
+  "Industrials": {
+    "n_train": 328883,
+    "n_val": 29485,
+    "n_test": 67681,
+    "val_auc": 0.6304,
+    "test_auc": 0.5441,
+    "val_ic": 0.0881,
+    "test_ic": 0.0231,
+    "val_ls": 0.0029,
+    "test_ls": -0.0014
+  },
+  "Real Estate": {
+    "n_train": 66526,
+    "n_val": 9955,
+    "n_test": 24129,
+    "val_auc": 0.6179,
+    "test_auc": 0.5278,
+    "val_ic": 0.1801,
+    "test_ic": -0.0026,
+    "val_ls": 0.0129,
+    "test_ls": -0.0005
+  },
+  "Technology": {
+    "n_train": 188681,
+    "n_val": 25534,
+    "n_test": 66266,
+    "val_auc": 0.6012,
+    "test_auc": 0.5278,
+    "val_ic": 0.1584,
+    "test_ic": 0.0607,
+    "val_ls": 0.0058,
+    "test_ls": 0.0004
+  },
+  "Utilities": {
+    "n_train": 153019,
+    "n_val": 11132,
+    "n_test": 26794,
+    "val_auc": 0.6394,
+    "test_auc": 0.5483,
+    "val_ic": 0.06,
+    "test_ic": -0.0707,
+    "val_ls": -0.0003,
+    "test_ls": -0.0001
+  }
+}

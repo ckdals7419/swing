@@ -11,18 +11,12 @@ __pycache__/
 venv/
 .pytest_cache/
 
-# heavy local data (yfinance downloads at runtime for notifier)
+# heavy local data only
 data/
-features/
-models/
-BTC/
-chart_yearly/
-
-# media / charts / nav dumps
 *.mp4
-*.png
-backtest_nav*.csv
-backtest_xval*.csv
+
+# nested repo — keep local only
+BTC/
 
 # OS / IDE
 .DS_Store
