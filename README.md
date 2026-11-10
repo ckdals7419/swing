@@ -147,6 +147,20 @@ L.PRESETS["UPRO"] = {"index": "^GSPC", "tr_etf": "SPY", "tr_er": 0.0009, "pre_di
 
 `python lev_synth.py` 의 `_report(name)` 로 학습/검증 오차를 반드시 확인.
 
+## NDX(QQQ) 신호 → 반도체 매수
+
+`results_kcm_ndx_to_semi.csv` — 레짐·트림은 NDX, 실행만 SOXX/SOXL. 세후·RP·트림50%.
+
+| 구간 | NDX→TQQQ | NDX→SOXL | NDX→SOXX(1x) |
+|------|----------|----------|--------------|
+| 2010+ | +42.6% / -52.0% | +41.3% / -80.8% | +19.6% / -35.8% |
+| 2013+ | +48.9% / -52.0% | **+54.0% / -80.8%** | +23.5% / -35.8% |
+| 08위기 | +18.4% / -70.0% | -2.0% / -79.4% | +8.6% / -30.7% |
+| 코로나20 | +122.7% / -50.5% | +140.0% / -55.2% | +48.8% / -21.5% |
+
+- NDX 신호→SOXL은 **SOXX 신호→SOXL(+34.5%/−83.6%, 2010+)보다 CAGR↑**.
+- 다만 MDD는 TQQQ보다 훨씬 큼(−80%). 수익은 비슷~소폭 우위, 리스크는 열위.
+
 ## 파라미터 민감도
 
 `python backtest_kcm_sensitivity.py` → `results_kcm_sensitivity.csv` + `sensitivity_heatmaps/*.png`.
