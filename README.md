@@ -147,6 +147,21 @@ L.PRESETS["UPRO"] = {"index": "^GSPC", "tr_etf": "SPY", "tr_er": 0.0009, "pre_di
 
 `python lev_synth.py` 의 `_report(name)` 로 학습/검증 오차를 반드시 확인.
 
+## 파라미터 민감도
+
+`python backtest_kcm_sensitivity.py` → `results_kcm_sensitivity.csv` + `sensitivity_heatmaps/*.png`.
+기본 체결·세금·RP·트림 유지, 축만 변경. ★ = 현행 기본값.
+
+| 그리드 | 2000+ 인접 CAGR σ | 기본 주변(대략) | 판정 |
+|--------|-------------------|-----------------|------|
+| RSI × VIX | **2.2%p** | +27.3% ~ +30.9% (3×3) | 평탄. RSI≤20만 급락 |
+| trim ON × weight | **0.9%p** | +29.2% ~ +31.0% | 매우 평탄. 트림 없음(+27.3%)보다 우위 |
+| trim ON × gap | 1.3%p | 기본 15%/5%p 근처 유지 | 히스테리시스 폭에 덜 민감 |
+| SMA ±buffer | — | **±1%가 2000+ 최고** | 0%·2%는 수 %p 열위 |
+
+- 2013+만 보면 RSI30/VIX25가 +55.5%로 보이지만 2000+에서는 기본(26/35)이 더 나음 → 최근 구간 과적합 위험.
+- 결론: **현행 파라미터를 유지해도 됨.** 미세 튜닝 이득보다 안정성이 큼.
+
 ## 교차 자산 검증 (TQQQ / SOXL / UPRO)
 
 `python backtest_kcm_cross.py` — KCM 기본 규칙 동일, 신호·실행만 바꿈.
@@ -181,6 +196,7 @@ python backtest_kcm_fills.py
 # 과열 트림 비교 → results_kcm_trim.csv
 python backtest_kcm_trim.py
 python backtest_kcm_cross.py  # TQQQ vs SOXL vs UPRO
+python backtest_kcm_sensitivity.py
 
 # 기타
 python backtest_kcm_variants.py
@@ -220,6 +236,7 @@ git log --oneline -10
 | `backtest_kcm_trim.py` | 과열 트림 비교 → `results_kcm_trim.csv` |
 | `lev_synth.py` | **레버리지 ETF 합성** (TR + 금리 + 스프레드, 프리셋·보정·검증) |
 | `backtest_kcm_cross.py` | TQQQ/SOXL/UPRO 교차 → `results_kcm_cross.csv` |
+| `backtest_kcm_sensitivity.py` | 파라미터 히트맵 → `results_kcm_sensitivity.csv` |
 | `results_kcm_fills.csv` | 체결 실험 결과 (재생: `python backtest_kcm_fills.py`) |
 | `results_kcm_trim.csv` | 트림 실험 결과 (재생: `python backtest_kcm_trim.py`) |
 | `backtest_kcm_variants.py` | KCM 변형·MOC·VT 옵션 |

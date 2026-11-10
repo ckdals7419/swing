@@ -38,11 +38,13 @@ INITIAL_KRW = 100_000_000
 CASH_RATE = 0.0345  # 외화RP 연이율
 
 
-def _temp_hold(close: pd.Series, vix: pd.Series, rsi_th: float) -> np.ndarray:
+def _temp_hold(
+    close: pd.Series, vix: pd.Series, rsi_th: float, vix_th: float = VIX_TH
+) -> np.ndarray:
     rsi = rsi_sma(close).ffill().fillna(50)
     vv = vix.reindex(close.index).ffill()
     vx10 = vv.rolling(10).mean()
-    vr = (vv > VIX_TH) & (vv < vx10)
+    vr = (vv > vix_th) & (vv < vx10)
     return ((rsi < rsi_th) | vr.fillna(False)).values
 
 
@@ -66,15 +68,28 @@ def simulate(
     tax: bool = True,
     initial: float = INITIAL_KRW,
     rsi_th: float = RSI_DIP,
+    vix_th: float = VIX_TH,
+    buf: float = BUF,
     trim: pd.Series | str | None = "default",
+    trim_on: float | None = None,
+    trim_off: float | None = None,
+    trim_w: float | None = None,
     rebal: float = 0.1,
     cash_rate: float = CASH_RATE,
 ) -> dict:
     """trim: close-decided exposure multiplier (0..1] while ON; rebalanced next open
     when target moves by >= rebal. "default" = trim_scale (vs200>15%→50%, <10% 복귀);
-    None = no trim. cash_rate: annual RP yield on idle cash (default 3.45%)."""
+    None = no trim. cash_rate: annual RP yield on idle cash (default 3.45%).
+    trim_on/off/w override default trim_scale thresholds when trim=="default"."""
     if isinstance(trim, str):
-        trim = trim_scale(sig_c)
+        kw = {}
+        if trim_on is not None:
+            kw["on"] = trim_on
+        if trim_off is not None:
+            kw["off"] = trim_off
+        if trim_w is not None:
+            kw["w"] = trim_w
+        trim = trim_scale(sig_c, **kw)
     if fill_mode is not None:  # uniform shortcut
         sma_fill = fill_mode
         temp_fill = "loc" if fill_mode == "intraday" else fill_mode
@@ -84,9 +99,11 @@ def simulate(
     vo = veh_o.reindex(idx).astype(float).values
     s50p = sig_c.rolling(50).mean().shift(1).values
     s200p = sig_c.rolling(200).mean().shift(1).values
-    temp = _temp_hold(sig_c, vix, rsi_th)
+    temp = _temp_hold(sig_c, vix, rsi_th, vix_th=vix_th)
     vts = vt_scale(sig_c, target=vt_target).values if vt_target else np.ones(len(idx))
-    _, inp_close, _ = classify_transitions(sig_c, vix, rsi_th=rsi_th)
+    _, inp_close, _ = classify_transitions(
+        sig_c, vix, rsi_th=rsi_th, vix_th=vix_th, buf=buf
+    )
     inp_c = inp_close.values
     m = trim.reindex(idx).ffill().fillna(1.0).clip(0.0, 1.0).values if trim is not None else np.ones(len(idx))
     r_cash = cash_rate / 252.0

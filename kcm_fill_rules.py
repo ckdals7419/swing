@@ -57,6 +57,8 @@ def classify_transitions(
     vix: pd.Series,
     *,
     rsi_th: float = RSI_DIP,
+    vix_th: float = VIX_TH,
+    buf: float = BUF,
 ) -> tuple[pd.Series, pd.Series, list[FillEvent]]:
     """Return (weight 0/1, regime_on, fill events on change days)."""
     sma50 = close.rolling(50).mean()
@@ -78,13 +80,13 @@ def classify_transitions(
 
     for i in range(1, n):
         has = pd.notna(vv.iloc[i]) and pd.notna(vx10.iloc[i])
-        vr = bool(has and vv.iloc[i] > VIX_TH and vv.iloc[i] < vx10.iloc[i])
+        vr = bool(has and vv.iloc[i] > vix_th and vv.iloc[i] < vx10.iloc[i])
         dip = float(rsi.iloc[i]) < rsi_th
         prev_w = w[i - 1]
         reason = ""
 
         if inp:
-            if vs200.iloc[i] < -BUF and vs50.iloc[i] < 0:
+            if vs200.iloc[i] < -buf and vs50.iloc[i] < 0:
                 inp = False
                 if vr or dip:
                     w[i] = 1.0
@@ -93,7 +95,7 @@ def classify_transitions(
                     reason = "temp_after_OFF"
                 else:
                     w[i] = 0.0
-                    prev_lo200 = bool(vs200.iloc[i - 1] < -BUF)
+                    prev_lo200 = bool(vs200.iloc[i - 1] < -buf)
                     prev_lo50 = bool(vs50.iloc[i - 1] < 0)
                     if prev_lo200 and not prev_lo50:
                         reason = "SMA50탈출"  # already <SMA200-1%, lost SMA50
@@ -104,10 +106,10 @@ def classify_transitions(
             else:
                 w[i] = 1.0
         else:
-            if vs200.iloc[i] >= BUF or vs50.iloc[i] >= 0:
+            if vs200.iloc[i] >= buf or vs50.iloc[i] >= 0:
                 inp = True
                 w[i] = 1.0
-                reason = "SMA200진입" if vs200.iloc[i] >= BUF else "SMA50진입"
+                reason = "SMA200진입" if vs200.iloc[i] >= buf else "SMA50진입"
             elif vr or dip:
                 w[i] = 1.0
                 if dip and vr:
@@ -123,7 +125,7 @@ def classify_transitions(
                     prev_has = pd.notna(vv.iloc[i - 1]) and pd.notna(vx10.iloc[i - 1])
                     prev_vr = bool(
                         prev_has
-                        and vv.iloc[i - 1] > VIX_TH
+                        and vv.iloc[i - 1] > vix_th
                         and vv.iloc[i - 1] < vx10.iloc[i - 1]
                     )
                     if prev_vr and not prev_dip:
