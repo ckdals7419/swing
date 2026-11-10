@@ -19,6 +19,10 @@ Tax (해외주식 양도소득세)
   연간 실현손익 합산(같은 해 손익 상계, 이월공제 없음),
   기본공제 250만원 초과분 22%, 해당 연도 말에 현금에서 납부
   (현금 부족 시 보유분 일부 매도).
+
+Cash
+  미투자 현금은 외화RP 연이율(기본 3.45%)을 일할로 가산 (cash *= 1+r/252).
+  이자소득세는 미반영(양도세만).
 """
 from __future__ import annotations
 
@@ -31,6 +35,7 @@ from notify_kcm_telegram import BUF, RSI_DIP, VIX_TH, rsi_sma, trim_scale, vt_sc
 TAX_RATE = 0.22
 TAX_DEDUCTION_KRW = 2_500_000
 INITIAL_KRW = 100_000_000
+CASH_RATE = 0.0345  # 외화RP 연이율
 
 
 def _temp_hold(close: pd.Series, vix: pd.Series, rsi_th: float) -> np.ndarray:
@@ -63,10 +68,11 @@ def simulate(
     rsi_th: float = RSI_DIP,
     trim: pd.Series | str | None = "default",
     rebal: float = 0.1,
+    cash_rate: float = CASH_RATE,
 ) -> dict:
     """trim: close-decided exposure multiplier (0..1] while ON; rebalanced next open
     when target moves by >= rebal. "default" = trim_scale (vs200>15%→50%, <10% 복귀);
-    None = no trim."""
+    None = no trim. cash_rate: annual RP yield on idle cash (default 3.45%)."""
     if isinstance(trim, str):
         trim = trim_scale(sig_c)
     if fill_mode is not None:  # uniform shortcut
@@ -82,7 +88,8 @@ def simulate(
     vts = vt_scale(sig_c, target=vt_target).values if vt_target else np.ones(len(idx))
     _, inp_close, _ = classify_transitions(sig_c, vix, rsi_th=rsi_th)
     inp_c = inp_close.values
-    m = trim.reindex(idx).ffill().fillna(1.0).clip(0.05, 1.0).values if trim is not None else np.ones(len(idx))
+    m = trim.reindex(idx).ffill().fillna(1.0).clip(0.0, 1.0).values if trim is not None else np.ones(len(idx))
+    r_cash = cash_rate / 252.0
 
     t0 = idx.searchsorted(pd.Timestamp(start))
     t1 = len(idx) if end is None else idx.searchsorted(pd.Timestamp(end), side="right")
@@ -157,6 +164,10 @@ def simulate(
     for k, i in enumerate(range(t0, t1)):
         if k > 0 and idx[i].year != idx[i - 1].year:
             pay_tax(vc[i - 1])
+
+        # overnight RP interest on cash held after previous close
+        if k > 0 and r_cash != 0.0 and cash > 0:
+            cash *= 1.0 + r_cash
 
         if pending is not None:
             trade(pending, vo[i])

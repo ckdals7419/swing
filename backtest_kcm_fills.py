@@ -77,7 +77,7 @@ def main() -> None:
     ]
     for vt_name, vt in [("VT없음", None), ("VT25", 0.25)]:
         print("\n" + "=" * 100)
-        print(f"KCM 실전체결 | {vt_name} | {COST:.0f}bps | 3x→TQQQ | 세후(22%, 공제250만, 원금1억)")
+        print(f"KCM 실전체결 | {vt_name} | {COST:.0f}bps | 3x→TQQQ | 세후(22%, 공제250만) | 현금RP 3.45%")
         print("=" * 100)
         print(f"{'구간':<10}" + "".join(f"{lab:^20}" for lab, _, _ in modes))
         for pname, ps, pe in periods:
