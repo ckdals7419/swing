@@ -1,10 +1,13 @@
 """
-Backtest KCM with trigger-specific fills (hybrid) vs uniform methods.
+Backtest KCM fill methods with realistic execution + tax (kcm_sim).
 
 Usage:
-  python backtest_kcm_fills.py
+  python backtest_kcm_fills.py           # 장중(감시주문) vs LOC vs 다음날시가, 세후
+  python backtest_kcm_fills.py --legacy  # 구 hybrid 엔진 (look-ahead 있음, 참고용)
 """
 from __future__ import annotations
+
+import sys
 
 import numpy as np
 import pandas as pd
@@ -53,6 +56,50 @@ def build_vehicle():
 
 
 def main() -> None:
+    from kcm_sim import simulate
+
+    print("Building dataset...")
+    data = build_vehicle()
+    periods = [
+        ("2000+", "2000-01-01", None),
+        ("2010+", "2010-02-11", None),
+        ("닷컴00-02", "2000-01-01", "2002-12-31"),
+        ("08금융위기", "2007-01-01", "2009-12-31"),
+        ("코로나20", "2020-01-01", "2020-12-31"),
+        ("2022", "2022-01-01", "2022-12-31"),
+        ("2025-26", "2025-01-01", None),
+    ]
+    nm = {"intraday": "장중", "loc": "LOC", "next_open": "시가"}
+    modes = [
+        (f"SMA {nm[a]}·RSI {nm[b]}", a, b)
+        for a in ("intraday", "loc", "next_open")
+        for b in ("loc", "next_open")
+    ]
+    for vt_name, vt in [("VT없음", None), ("VT25", 0.25)]:
+        print("\n" + "=" * 100)
+        print(f"KCM 실전체결 | {vt_name} | {COST:.0f}bps | 3x→TQQQ | 세후(22%, 공제250만, 원금1억)")
+        print("=" * 100)
+        print(f"{'구간':<10}" + "".join(f"{lab:^20}" for lab, _, _ in modes))
+        for pname, ps, pe in periods:
+            cells = []
+            for _, a, b in modes:
+                r = simulate(*data, sma_fill=a, temp_fill=b, start=ps, end=pe,
+                             cost_bps=COST, vt_target=vt)
+                cells.append(f"{r['cagr']:+6.1%}/{r['mdd']:6.1%}")
+            print(f"{pname:<10}" + "".join(f"{x:^20}" for x in cells))
+        print(f"\n상세 ({vt_name})")
+        print(f"{'방식':<18}{'00세후':>8}{'00세전':>8}{'00MDD':>8}{'10세후':>8}{'10MDD':>8}{'거래':>6}")
+        for lab, a, b in modes:
+            x = simulate(*data, sma_fill=a, temp_fill=b, start="2000-01-01", cost_bps=COST, vt_target=vt)
+            y = simulate(*data, sma_fill=a, temp_fill=b, start="2000-01-01", cost_bps=COST,
+                         vt_target=vt, tax=False)
+            z = simulate(*data, sma_fill=a, temp_fill=b, start="2010-02-11", cost_bps=COST, vt_target=vt)
+            print(f"{lab:<18}{x['cagr']:>+8.1%}{y['cagr']:>+8.1%}{x['mdd']:>8.1%}"
+                  f"{z['cagr']:>+8.1%}{z['mdd']:>8.1%}{x['trades']:>6}")
+
+
+def main_legacy() -> None:
+    """Old hybrid engine (same-day close-confirmed intraday fills = look-ahead)."""
     print("Building dataset...")
     sig_c, sig_o, sig_h, sig_l, veh_c, veh_o, vx = build_vehicle()
     _, _, events = classify_transitions(sig_c, vx)
@@ -60,6 +107,13 @@ def main() -> None:
     for k, v in FILL_RULES.items():
         print(f"  {k}: {v}")
     print(f"Tagged flips (full hist): {len(events)}")
+    from collections import Counter
+
+    cnt = Counter(e.reason for e in events)
+    print("By trigger:")
+    for k in FILL_RULES:
+        if cnt.get(k):
+            print(f"  {k}: {cnt[k]}  ({FILL_RULES[k]})")
 
     periods = [
         ("2000+", "2000-01-01", None),
@@ -113,4 +167,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main_legacy() if "--legacy" in sys.argv else main()

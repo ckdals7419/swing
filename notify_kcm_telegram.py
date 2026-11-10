@@ -11,7 +11,8 @@ Run after US cash close (e.g. 06:30 KST next calendar day).
 KCM (baseline):
   - Regime: SMA200 ±1% buffer + SMA50
   - Temp hold when regime OFF: SMA-RSI(14) < 26, or VIX>35 & falling vs 10d MA
-  - VT25 vol-targeting is optional (--vt25); default is full 0/100% signal
+  - Overheat trim (default): vs200 > +15% → 50%, back to 100% when vs200 < +10%
+  - VT25 vol-targeting is optional (--vt25)
 
 Env:
   TELEGRAM_BOT_TOKEN
@@ -21,6 +22,7 @@ Usage:
   python notify_kcm_telegram.py           # send Telegram
   python notify_kcm_telegram.py --dry-run # print only
   python notify_kcm_telegram.py --dry-run --vt25  # also show VT25-scaled size
+  python notify_kcm_telegram.py --dry-run --no-trim  # disable overheat trim
 """
 from __future__ import annotations
 
@@ -39,6 +41,9 @@ RSI_N = 14
 RSI_DIP = 26.0  # simple-average RSI threshold (regime-OFF temp hold)
 VIX_TH = 35.0
 VT_TARGET = 0.25
+TRIM_ON = 0.15  # vs200 above this → trim
+TRIM_OFF = 0.10  # vs200 below this → restore
+TRIM_W = 0.5
 
 
 def rsi_sma(close: pd.Series, n: int = RSI_N) -> pd.Series:
@@ -69,17 +74,38 @@ def vt_scale(
     return (target / rvol.replace(0, np.nan)).clip(upper=1.0).fillna(1.0)
 
 
+def trim_scale(
+    close: pd.Series,
+    on: float = TRIM_ON,
+    off: float = TRIM_OFF,
+    w: float = TRIM_W,
+) -> pd.Series:
+    """Overheat trim multiplier with hysteresis: w after vs200 > on, 1 after vs200 < off."""
+    vs200 = (close / close.rolling(200).mean() - 1).values
+    out = np.ones(len(vs200))
+    hot = False
+    for i, v in enumerate(vs200):
+        if np.isfinite(v):
+            if not hot and v > on:
+                hot = True
+            elif hot and v < off:
+                hot = False
+        out[i] = w if hot else 1.0
+    return pd.Series(out, index=close.index, name="trim")
+
+
 def kcm_weights(
     close: pd.Series,
     vix: pd.Series,
     *,
     rsi_th: float = RSI_DIP,
     vt_target: float | None = None,
+    trim: bool = True,
 ) -> tuple[pd.Series, pd.Series]:
     """Return (weight, in_position bool) aligned to close.index.
 
-    Baseline weight is 0 or 1. If vt_target is set (e.g. 0.25), multiply by
-    vt_scale(close, target=vt_target) — optional overlay, not part of default KCM.
+    Signal weight is 0 or 1, times trim_scale (default on: 0.5 when overheated).
+    If vt_target is set (e.g. 0.25), also multiply by vt_scale (optional overlay).
     """
     sma50 = close.rolling(50).mean()
     sma200 = close.rolling(200).mean()
@@ -117,6 +143,8 @@ def kcm_weights(
         states[i] = inp
 
     w_s = pd.Series(w, index=close.index, name="w")
+    if trim:
+        w_s = w_s * trim_scale(close)
     if vt_target is not None:
         w_s = (w_s * vt_scale(close, target=vt_target)).clip(0, 1)
     return w_s, pd.Series(states, index=close.index, name="inp")
@@ -125,7 +153,7 @@ def kcm_weights(
 def action_text(w_prev: float, w_now: float) -> str:
     """What to do at next open given today's close signal w_now vs yesterday."""
     if w_now > w_prev + 1e-9 and w_now > 0:
-        if w_now >= 0.999 and w_prev < 0.999:
+        if w_now >= 0.999 and w_prev <= 1e-9:
             return "BUY 100% (내일 시가)"
         return f"INCREASE → {w_now:.0%} (내일 시가)"
     if w_now < w_prev - 1e-9:
@@ -149,6 +177,7 @@ def reason_line(
     w: float,
     *,
     rsi_th: float = RSI_DIP,
+    hot: bool = False,
 ) -> str:
     bits = []
     if inp:
@@ -161,6 +190,8 @@ def reason_line(
             bits.append(f"RSI딥({rsi:.1f})")
         if vix > VIX_TH and vix < vix10:
             bits.append(f"VIXre({vix:.1f})")
+    if hot:
+        bits.append(f"과열트림({TRIM_W:.0%})")
     bits.append(f"vs200={vs200:+.1%}")
     bits.append(f"vs50={vs50:+.1%}")
     bits.append(f"SMA-RSI={rsi:.1f}")
@@ -185,9 +216,11 @@ def _snapshot(
     px_series: pd.Series | None = None,
     *,
     vt_target: float | None = None,
+    trim: bool = True,
 ):
     """Build one vehicle block from signal series `close` (and optional display price)."""
-    w, inp = kcm_weights(close, vix, vt_target=vt_target)
+    w, inp = kcm_weights(close, vix, vt_target=vt_target, trim=trim)
+    hot = bool(trim and trim_scale(close).iloc[-1] < 1.0)
     i = -1
     w_now = float(w.iloc[i])
     w_prev = float(w.iloc[i - 1]) if len(w) >= 2 else w_now
@@ -210,12 +243,12 @@ def _snapshot(
         "label": label,
         "px": px,
         "act": action_text(w_prev, w_now),
-        "why": reason_line(in_pos, vs200, vs50, rsi, vx, vx10, w_now),
+        "why": reason_line(in_pos, vs200, vs50, rsi, vx, vx10, w_now, hot=hot),
         "w": w_now,
     }
 
 
-def build_message(*, vt_target: float | None = None) -> str:
+def build_message(*, vt_target: float | None = None, trim: bool = True) -> str:
     smh = load_close("SMH")
     qqq = load_close("QQQ")
     tqqq = load_close("TQQQ")
@@ -226,9 +259,9 @@ def build_message(*, vt_target: float | None = None) -> str:
     tqqq_c = tqqq["Close"].dropna()
     vix_c = vix_df["Close"].dropna()
 
-    smh_snap = _snapshot(smh_c, vix_c, "SMH USD", vt_target=vt_target)
+    smh_snap = _snapshot(smh_c, vix_c, "SMH USD", vt_target=vt_target, trim=trim)
     tqqq_snap = _snapshot(
-        qqq_c, vix_c, "TQQQ (QQQ 신호)", px_series=tqqq_c, vt_target=vt_target
+        qqq_c, vix_c, "TQQQ (QQQ 신호)", px_series=tqqq_c, vt_target=vt_target, trim=trim
     )
 
     d0 = smh_snap["date"].date()
@@ -238,7 +271,12 @@ def build_message(*, vt_target: float | None = None) -> str:
     vt_note = (
         f" | VT{int(vt_target * 100)} 옵션 ON (신호×vol scale)"
         if vt_target is not None
-        else " | VT 옵션 OFF (0/100%)"
+        else " | VT 옵션 OFF"
+    )
+    trim_note = (
+        f" | 과열트림 vs200>{TRIM_ON:.0%}→{TRIM_W:.0%}, <{TRIM_OFF:.0%} 복귀"
+        if trim
+        else " | 과열트림 OFF"
     )
     lines = [
         f"KCM Daily  ({date_line})",
@@ -253,6 +291,7 @@ def build_message(*, vt_target: float | None = None) -> str:
         f"  {tqqq_snap['why']}",
         "",
         f"규칙: SMA200±1% + SMA50 | SMA-RSI<{RSI_DIP:.0f} or VIX>{VIX_TH:.0f}&하락 = 임시보유"
+        + trim_note
         + vt_note,
     ]
     return "\n".join(lines)
@@ -275,11 +314,12 @@ def main() -> int:
         action="store_true",
         help="Optional: scale KCM weight by VT25 (min(1, 0.25/20d rvol))",
     )
+    ap.add_argument("--no-trim", action="store_true", help="Disable overheat trim")
     args = ap.parse_args()
     vt = VT_TARGET if args.vt25 else None
 
     try:
-        msg = build_message(vt_target=vt)
+        msg = build_message(vt_target=vt, trim=not args.no_trim)
     except Exception as e:
         msg = f"KCM Daily FAILED: {e}"
         print(msg, file=sys.stderr)

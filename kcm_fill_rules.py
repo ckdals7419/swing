@@ -5,12 +5,16 @@ Signal is always decided on the signal asset close (QQQ/NDX).
 Fill timing depends on *why* weight changed:
 
   Price-level triggers (observable intraday):
-    SMA200 진입/탈출, SMA50 진입  → intraday touch
+    SMA200 진입/탈출, SMA50 진입/탈출  → intraday touch
   Close-confirmed triggers (RSI / VIX):
     RSI·VIX 진입/탈출             → LOC (same close)
     (다음날 시가도 허용; 기본은 LOC)
 
-SMA50 단독 탈출은 없음 — 청산은 SMA200-1% AND SMA50 동시(SMA200탈출).
+레짐 청산은 항상 SMA200-1% AND SMA50 동시 미만.
+다만 *어느 레벨이 마지막에 깨졌는지*로 체결가를 나눔:
+  - 이미 SMA200-1% 아래 + SMA50 위 → SMA50 이탈 = SMA50탈출 (장중)
+  - 이미 SMA50 아래 + SMA200-1% 위 → SMA200-1% 이탈 = SMA200탈출 (장중)
+  - 하루만에 둘 다 깨짐 → SMA동시탈출 (장중, 더 낮은 레벨=두 번째 터치)
 """
 from __future__ import annotations
 
@@ -29,6 +33,8 @@ FILL_RULES: dict[str, str] = {
     "SMA200진입": "intraday",
     "SMA50진입": "intraday",
     "SMA200탈출": "intraday",
+    "SMA50탈출": "intraday",
+    "SMA동시탈출": "intraday",
     "RSI진입": "loc",
     "VIX진입": "loc",
     "RSI탈출": "loc",
@@ -87,7 +93,14 @@ def classify_transitions(
                     reason = "temp_after_OFF"
                 else:
                     w[i] = 0.0
-                    reason = "SMA200탈출"
+                    prev_lo200 = bool(vs200.iloc[i - 1] < -BUF)
+                    prev_lo50 = bool(vs50.iloc[i - 1] < 0)
+                    if prev_lo200 and not prev_lo50:
+                        reason = "SMA50탈출"  # already <SMA200-1%, lost SMA50
+                    elif prev_lo50 and not prev_lo200:
+                        reason = "SMA200탈출"  # already <SMA50, lost SMA200-1%
+                    else:
+                        reason = "SMA동시탈출"  # both broken same day
             else:
                 w[i] = 1.0
         else:
@@ -155,11 +168,17 @@ def _buy_touch(sig_o, sig_h, sma50, sma200, i, reason: str) -> float:
     return min(cands) if cands else o
 
 
-def _sell_touch(sig_o, sig_l, sma50, sma200, i) -> float:
+def _sell_touch(sig_o, sig_l, sma50, sma200, i, reason: str = "") -> float:
     o, l = float(sig_o.iloc[i]), float(sig_l.iloc[i])
     thr200 = float(sma200.iloc[i]) * (1 - BUF)
     thr50 = float(sma50.iloc[i])
-    level = min(thr200, thr50)
+    if reason == "SMA50탈출":
+        level = thr50
+    elif reason == "SMA200탈출":
+        level = thr200
+    else:
+        # SMA동시탈출 / fallback: second (lower) level completes dual exit
+        level = min(thr200, thr50)
     if l <= level:
         return o if o <= level else level
     return o
@@ -306,7 +325,7 @@ def hybrid_backtest(
             if ww[i] > ww[i - 1]:
                 sig_f = _buy_touch(sig_open, sig_high, sma50, sma200, fi, reason)
             else:
-                sig_f = _sell_touch(sig_open, sig_low, sma50, sma200, fi)
+                sig_f = _sell_touch(sig_open, sig_low, sma50, sma200, fi, reason)
             v_ref = vo[i] if opened_today else vc[i - 1]
             s_ref = float(sig_open.iloc[fi]) if opened_today else sc_[i - 1]
             if s_ref <= 0 or v_ref <= 0:
