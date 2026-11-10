@@ -1,0 +1,35 @@
+---
+description: Leveraged-ETF synthesis and backtest conventions (TQQQ/UPRO/SOXL/etc.)
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Leveraged ETF synthesis — use `lev_synth.py`
+
+Never build leveraged vehicles as `L × price-index return − constant`. Use `lev_synth`:
+
+- Base = **total-return index** (`load_tr_index(price_idx, tr_etf, tr_etf_er, pre_div_yield=...)`),
+  not the price index (missing dividends biases spread negative).
+- Financing = `[ER + (L−1)(rf + spread)] × days/365`, `rf` = ^IRX (previous day).
+- Fit `c2` by daily OLS, `spread` by **cumulative-return matching** (`calibrate_drift`) on the
+  full real-ETF history; verify with `_report(name)` (train/test drift, max path deviation).
+- Store result in `PRESETS[name]`; load with `build_preset(name)` → `vehicle` is synth spliced to real.
+
+```python
+# ❌ BAD
+veh = 100 * (1 + 3 * ndx.pct_change() - 1e-4).cumprod()
+
+# ✅ GOOD
+from lev_synth import build_preset
+veh = build_preset("TQQQ")["vehicle"]
+```
+
+New index (S&P500, SMH, foreign): pick TR proxy ETF + its ER, fit on the real leveraged ETF,
+add preset, check `_report`. Note USD (2x semis) tracks DJ US Semis, not SMH.
+
+# Backtest defaults (`kcm_sim.simulate`)
+
+- Signal on close; SMA fills next open, RSI/VIX LOC; intraday stops only for comparison.
+- Korean overseas CGT 22% (2.5M KRW deduction), cash RP 3.45%, 9 bps cost.
+- Overheat trim on (vs200 > 15% → 50%, < 10% restore).
+- Save experiment grids to `results_*.csv` and summarize in README.

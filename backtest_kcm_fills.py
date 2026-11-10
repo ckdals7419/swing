@@ -26,31 +26,21 @@ def dl(t: str, start: str = "1990-01-01") -> pd.DataFrame:
     return d
 
 
-def build_vehicle():
-    ndx = dl("^NDX")
-    tqqq = dl("TQQQ", "2010-01-01")
+def build_vehicle(preset: str = "TQQQ"):
+    """Signal = price index OHLC; vehicle = lev_synth preset (TR + rate financing),
+    spliced to the real ETF from its listing date."""
+    from lev_synth import build_preset
+
+    b = build_preset(preset, start="1985-01-01")
+    px = b["signal"]
     vix = dl("^VIX")
-    sig_c = ndx["Close"].astype(float)
-    sig_o = ndx["Open"].astype(float).fillna(sig_c)
-    sig_h = ndx["High"].astype(float).fillna(np.maximum(sig_o, sig_c))
-    sig_l = ndx["Low"].astype(float).fillna(np.minimum(sig_o, sig_c))
-    ret = sig_c.pct_change().fillna(0.0)
-    oc = (sig_o / sig_c.shift(1)).replace([np.inf, -np.inf], np.nan).fillna(1.0)
-    veh_c = pd.Series(100.0, index=sig_c.index)
-    for i in range(1, len(veh_c)):
-        veh_c.iloc[i] = veh_c.iloc[i - 1] * (1 + LEV * float(ret.iloc[i]) - 1e-4)
-    veh_o = veh_c.shift(1) * (1 + LEV * (oc - 1))
-    veh_o.iloc[0] = 100.0
-    rc = tqqq["Close"].astype(float)
-    ro = tqqq["Open"].astype(float)
-    ok = rc.notna() & ro.notna()
-    rc, ro = rc[ok], ro[ok]
-    sc0 = float(veh_c.loc[rc.index[0]]) / float(rc.iloc[0])
-    cm = rc.index.intersection(veh_c.index)
-    veh_c.loc[cm] = rc.loc[cm] * sc0
-    veh_o.loc[cm] = ro.loc[cm] * sc0
-    veh_o = veh_o.fillna(veh_c).ffill()
-    veh_c = veh_c.ffill()
+    sig_c = px["Close"].astype(float)
+    sig_o = px["Open"].astype(float).fillna(sig_c)
+    sig_h = px["High"].astype(float).fillna(np.maximum(sig_o, sig_c))
+    sig_l = px["Low"].astype(float).fillna(np.minimum(sig_o, sig_c))
+    veh = b["vehicle"].reindex(sig_c.index)
+    veh_c = veh["Close"].ffill()
+    veh_o = veh["Open"].fillna(veh_c).ffill()
     vx = vix["Close"].astype(float).reindex(sig_c.index).ffill()
     return sig_c, sig_o, sig_h, sig_l, veh_c, veh_o, vx
 
