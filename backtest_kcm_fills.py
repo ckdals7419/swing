@@ -56,7 +56,7 @@ def build_vehicle():
 
 
 def main() -> None:
-    from kcm_sim import simulate
+    from kcm_sim import CASH_RATE, simulate
 
     print("Building dataset...")
     data = build_vehicle()
@@ -75,6 +75,7 @@ def main() -> None:
         for a in ("intraday", "loc", "next_open")
         for b in ("loc", "next_open")
     ]
+    rows = []
     for vt_name, vt in [("VT없음", None), ("VT25", 0.25)]:
         print("\n" + "=" * 100)
         print(f"KCM 실전체결 | {vt_name} | {COST:.0f}bps | 3x→TQQQ | 세후(22%, 공제250만) | 현금RP 3.45%")
@@ -82,10 +83,16 @@ def main() -> None:
         print(f"{'구간':<10}" + "".join(f"{lab:^20}" for lab, _, _ in modes))
         for pname, ps, pe in periods:
             cells = []
-            for _, a, b in modes:
+            for lab, a, b in modes:
                 r = simulate(*data, sma_fill=a, temp_fill=b, start=ps, end=pe,
                              cost_bps=COST, vt_target=vt)
                 cells.append(f"{r['cagr']:+6.1%}/{r['mdd']:6.1%}")
+                rows.append({
+                    "vt": vt_name, "period": pname, "mode": lab,
+                    "sma_fill": a, "temp_fill": b,
+                    "cagr": r["cagr"], "mdd": r["mdd"], "trades": r["trades"],
+                    "cash_rate": CASH_RATE, "cost_bps": COST, "tax": True,
+                })
             print(f"{pname:<10}" + "".join(f"{x:^20}" for x in cells))
         print(f"\n상세 ({vt_name})")
         print(f"{'방식':<18}{'00세후':>8}{'00세전':>8}{'00MDD':>8}{'10세후':>8}{'10MDD':>8}{'거래':>6}")
@@ -96,6 +103,9 @@ def main() -> None:
             z = simulate(*data, sma_fill=a, temp_fill=b, start="2010-02-11", cost_bps=COST, vt_target=vt)
             print(f"{lab:<18}{x['cagr']:>+8.1%}{y['cagr']:>+8.1%}{x['mdd']:>8.1%}"
                   f"{z['cagr']:>+8.1%}{z['mdd']:>8.1%}{x['trades']:>6}")
+    out = "results_kcm_fills.csv"
+    pd.DataFrame(rows).to_csv(out, index=False, float_format="%.6f")
+    print(f"\nSaved {out} ({len(rows)} rows)")
 
 
 def main_legacy() -> None:

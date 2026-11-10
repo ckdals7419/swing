@@ -76,11 +76,30 @@ IS 2000-2012에서 고르고 OOS 2013+로 검증.
 
 현금 RP 3.45%를 넣으면 트림 우위가 더 커짐 (현금 구간·50% 구간에서 이자 가산).
 
+### 트림 깊이: →50% vs →0%(전량) (RP 3.45% 포함, VT 없음)
+
+| 규칙 | 2000+ | OOS13+ | 닷컴 | 08위기 | 코로나20 |
+|------|-------|--------|------|--------|----------|
+| 트림 없음 | +28.5% / -86.7% | +48.0% / -56.8% | -19.6% / -86.7% | +24.8% / -74.6% | +188% / -56.8% |
+| **→50% (채택)** | **+31.9% / -73.1%** | **+48.9% / -52.0%** | +6.4% / -68.2% | +16.5% / -72.4% | +123% / -50.5% |
+| →0% (전량) | +31.7% / -74.1% | +48.5% / -50.2% | +27.5% / -70.1% | +1.0% / -72.8% | +43% / -42.8% |
+
+전량은 닷컴에서만 우위. 08·코로나 반등을 놓쳐 장기 CAGR은 50%와 비슷하거나 약간 열위 → **기본 유지: →50%**.
+
 - vs200(SMA200 이격) 계열은 임계 15~30% 전반에서 OOS 수익·MDD가 함께 소폭 개선 → 비교적 견고.
 - RSI 과열 트림은 거래만 늘고 OOS 수익 악화. 1년 수익률 트림은 IS 1위지만 OOS 악화(과적합).
 - 2000+ MDD 개선의 대부분은 닷컴 한 번에서 나옴.
 - 검증: 독립 구현(단위·평단·세금 별도 계산)과 총수익·MDD 완전 일치. 신호=종가, 체결=다음날 시가.
-- **기본값으로 채택** (VT 없음 기준 50%). VT25와 함께 쓸 때는 70%가 약간 나음(`trim_scale(close, w=0.7)`).
+- **기본값으로 채택** (VT 없음 기준 50%).
+
+### 실험 결과 저장 위치
+
+| 파일 | 내용 |
+|------|------|
+| `README.md` | 요약 표 (채택 규칙·핵심 숫자) |
+| `results_kcm_fills.csv` | 체결 방식 6조합 × 구간 (`backtest_kcm_fills.py` 생성) |
+| `results_kcm_trim.csv` | 과열 트림 규칙 전체 IS/OOS (`backtest_kcm_trim.py` 생성) |
+| `backtest_nav*.csv`, `backtest_xval_*.csv` | 예전 QLD/교차검증 NAV (참고용, 구엔진) |
 
 ## 자주 쓰는 명령
 
@@ -92,8 +111,11 @@ pip install -r requirements.txt
 python notify_kcm_telegram.py --dry-run
 python notify_kcm_telegram.py --dry-run --vt25
 
-# 트리거별 체결 원칙 백테스트
+# 트리거별 체결 원칙 백테스트 → results_kcm_fills.csv
 python backtest_kcm_fills.py
+
+# 과열 트림 비교 → results_kcm_trim.csv
+python backtest_kcm_trim.py
 
 # 기타
 python backtest_kcm_variants.py
@@ -129,8 +151,10 @@ git log --oneline -10
 | `notify_kcm_telegram.py` | 기준 KCM + 일일 신호 / 텔레그램 |
 | `kcm_sim.py` | **실전 체결(장중 감시/LOC/다음날 시가) + 양도세** 시뮬레이터 |
 | `kcm_fill_rules.py` | 트리거 분류 + 구 hybrid 엔진(look-ahead, 참고용) |
-| `backtest_kcm_fills.py` | 체결 방식 비교 (세후, VT 없음/VT25) |
-| `backtest_kcm_trim.py` | 과열 트림 규칙 비교 (IS/OOS) |
+| `backtest_kcm_fills.py` | 체결 방식 비교 → `results_kcm_fills.csv` |
+| `backtest_kcm_trim.py` | 과열 트림 비교 → `results_kcm_trim.csv` |
+| `results_kcm_fills.csv` | 체결 실험 결과 (재생: `python backtest_kcm_fills.py`) |
+| `results_kcm_trim.csv` | 트림 실험 결과 (재생: `python backtest_kcm_trim.py`) |
 | `backtest_kcm_variants.py` | KCM 변형·MOC·VT 옵션 |
 | `review_off_regime.py` | 레짐 OFF 규칙 스윕 |
 | `analog_regime_break.py` | 레짐 붕괴 유사 사례 |
