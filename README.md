@@ -147,6 +147,24 @@ L.PRESETS["UPRO"] = {"index": "^GSPC", "tr_etf": "SPY", "tr_er": 0.0009, "pre_di
 
 `python lev_synth.py` 의 `_report(name)` 로 학습/검증 오차를 반드시 확인.
 
+## SOXX → SOXL 교차 검증
+
+`python backtest_kcm_soxl.py` — KCM 기본 규칙 그대로, 신호=SOXX / 실행=SOXL(3x, `lev_synth` 프리셋).
+세후·RP 3.45%·트림 50%·SMA 시가·RSI LOC.
+
+| 구간 | NDX→TQQQ | SOXX→SOXL |
+|------|----------|-----------|
+| 2001+ (SOXX 상장~) | +36.8% / -70.7% | +13.4% / -95.4% |
+| 2010+ (SOXL 상장~) | +42.6% / -52.0% | +34.5% / -83.6% |
+| 2013+ | +48.9% / -52.0% | +44.3% / -83.6% |
+| 08위기 | +18.4% / -70.0% | -19.3% / -85.6% |
+| 코로나20 | +122.7% / -50.5% | +128.0% / -55.2% |
+| 2022 | -45.0% / -46.8% | -68.7% / -68.2% |
+
+- SOXL 합성 TE≈7%/yr (TQQQ≈3%보다 노이즈 큼). 실물 구간(2010+)만 봐도 MDD가 훨씬 큼.
+- 같은 규칙이 반도체 3배에서는 **수익↓·낙폭↑**. 나스닥 특화가 큼 → 그대로 이식하기 어려움.
+- 결과: `results_kcm_soxl.csv`.
+
 ## 자주 쓰는 명령
 
 ```bash
@@ -162,6 +180,7 @@ python backtest_kcm_fills.py
 
 # 과열 트림 비교 → results_kcm_trim.csv
 python backtest_kcm_trim.py
+python backtest_kcm_soxl.py   # SOXX→SOXL vs TQQQ
 
 # 기타
 python backtest_kcm_variants.py
@@ -200,6 +219,7 @@ git log --oneline -10
 | `backtest_kcm_fills.py` | 체결 방식 비교 → `results_kcm_fills.csv` |
 | `backtest_kcm_trim.py` | 과열 트림 비교 → `results_kcm_trim.csv` |
 | `lev_synth.py` | **레버리지 ETF 합성** (TR + 금리 + 스프레드, 프리셋·보정·검증) |
+| `backtest_kcm_soxl.py` | SOXX→SOXL vs NDX→TQQQ → `results_kcm_soxl.csv` |
 | `results_kcm_fills.csv` | 체결 실험 결과 (재생: `python backtest_kcm_fills.py`) |
 | `results_kcm_trim.csv` | 트림 실험 결과 (재생: `python backtest_kcm_trim.py`) |
 | `backtest_kcm_variants.py` | KCM 변형·MOC·VT 옵션 |

@@ -40,6 +40,13 @@ PRESETS: dict[str, dict] = {
         "lev": 3.0, "er": 0.0084, "spread": 0.003348, "c2": -0.2531,
         "real": "TQQQ", "fit": "2010-02-11~2026-11",
     },
+    # Signal = SOXX (same family as SOXL). TR = SOXX adj + SOXX ER.
+    # Fit on full SOXL history; TE ~7%/yr (noisier than TQQQ).
+    "SOXL": {
+        "index": "SOXX", "tr_etf": "SOXX", "tr_er": 0.0035, "pre_div": 0.0,
+        "lev": 3.0, "er": 0.0095, "spread": 0.0068, "c2": -0.1366,
+        "real": "SOXL", "fit": "2010-03-11~2026-11",
+    },
 }
 
 
