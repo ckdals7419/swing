@@ -47,6 +47,12 @@ PRESETS: dict[str, dict] = {
         "lev": 3.0, "er": 0.0095, "spread": 0.0068, "c2": -0.1366,
         "real": "SOXL", "fit": "2010-03-11~2026-11",
     },
+    # Signal = S&P500 price index; TR = SPY adj + SPY ER (pre-1993: +2% div yield).
+    "UPRO": {
+        "index": "^GSPC", "tr_etf": "SPY", "tr_er": 0.0009, "pre_div": 0.02,
+        "lev": 3.0, "er": 0.0091, "spread": 0.0011, "c2": -0.4263,
+        "real": "UPRO", "fit": "2009-06-25~2026-11",
+    },
 }
 
 
