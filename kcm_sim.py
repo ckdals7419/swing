@@ -76,11 +76,14 @@ def simulate(
     trim_w: float | None = None,
     rebal: float = 0.1,
     cash_rate: float = CASH_RATE,
+    gap_sma200_entry: bool = False,
+    gap_abort_loc: bool = False,
+    open_cancel_buy: str | None = None,
 ) -> dict:
     """trim: close-decided exposure multiplier (0..1] while ON; rebalanced next open
-    when target moves by >= rebal. "default" = trim_scale (vs200>15%→50%, <10% 복귀);
-    None = no trim. cash_rate: annual RP yield on idle cash (default 3.45%).
-    trim_on/off/w override default trim_scale thresholds when trim=="default"."""
+    when target moves by >= rebal. "default" = trim_scale; None = no trim.
+    open_cancel_buy: skip pending buy at open if already invalid —
+      "sma200m1" / "exit" / "not_entry"."""
     if isinstance(trim, str):
         kw = {}
         if trim_on is not None:
@@ -177,8 +180,12 @@ def simulate(
     held_w = 0.0  # current weight
     base_w = 1.0  # sticky VT scale fixed at entry
     pending = None
+    gap_entries = 0
+    buys_cancelled = 0
+    gap_bought_today = False
 
     for k, i in enumerate(range(t0, t1)):
+        gap_bought_today = False
         if k > 0 and idx[i].year != idx[i - 1].year:
             pay_tax(vc[i - 1])
 
@@ -187,9 +194,48 @@ def simulate(
             cash *= 1.0 + r_cash
 
         if pending is not None:
-            trade(pending, vo[i])
-            held_w = pending
-            pending = None
+            do_fill = True
+            if (
+                open_cancel_buy
+                and pending > held_w
+                and held_w == 0.0
+                and np.isfinite(s200p[i])
+                and np.isfinite(s50p[i])
+            ):
+                thr_up = float(s200p[i]) * (1 + buf)
+                thr_dn = float(s200p[i]) * (1 - buf)
+                thr50 = float(s50p[i])
+                if open_cancel_buy == "sma200m1":
+                    do_fill = not (o[i] < thr_dn)
+                elif open_cancel_buy == "exit":
+                    do_fill = not (o[i] < thr_dn and o[i] < thr50)
+                elif open_cancel_buy == "not_entry":
+                    do_fill = not (o[i] < thr_up and o[i] < thr50)
+                else:
+                    raise ValueError(open_cancel_buy)
+                if not do_fill:
+                    buys_cancelled += 1
+                    pending = None
+            if pending is not None:
+                trade(pending, vo[i])
+                held_w = pending
+                pending = None
+
+        # Gap-open SMA200+1% entry: prev close below thr, today open already above → buy open
+        if (
+            gap_sma200_entry
+            and sma_fill != "intraday"
+            and k > 0
+            and held_w == 0.0
+            and np.isfinite(s200p[i])
+        ):
+            thr200 = float(s200p[i]) * (1 + buf)
+            if c[i - 1] < thr200 and o[i] >= thr200:
+                base_w = float(vts[i - 1])
+                held_w = base_w * float(m[i - 1])
+                trade(held_w, vo[i])
+                gap_entries += 1
+                gap_bought_today = True
 
         if sma_fill == "intraday":
             ok = np.isfinite(s50p[i]) and np.isfinite(s200p[i])
@@ -214,7 +260,12 @@ def simulate(
             regime_flip = inp != prev_inp
 
         want_on = inp or bool(temp[i])
-        if k == 0:
+        # Same-day abort: gap-bought at open but close did not confirm → LOC exit
+        if gap_abort_loc and gap_bought_today and held_w > 0.0 and not want_on:
+            trade(0.0, vc[i])
+            held_w = 0.0
+            pending = None
+        elif k == 0:
             if want_on:
                 base_w = float(vts[i])
                 held_w = base_w * m[i]
@@ -252,4 +303,6 @@ def simulate(
         "total": term - 1,
         "trades": trades,
         "tax_paid_ratio": tax_paid / initial,
+        "gap_entries": gap_entries,
+        "buys_cancelled": buys_cancelled,
     }
