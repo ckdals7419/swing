@@ -4,9 +4,8 @@ KCM QLD Strategy — Detailed Visualization
 KCM QLD (baseline):
   - SMA200 + SMA50 recovery gate
   - Anti-whipsaw buffer: exit at -1%, re-enter at +1%
-  - VIX spike re-entry: 100% when VIX > 35 & declining (< SMA10)
   - RSI dip buy: 100% when RSI < 30 while out of position
-  - (RSI/VIX do not flip in_position; binary 100/0 only)
+  - (RSI does not flip in_position; binary 100/0 only; VIX temp hold removed)
 
 KCM QLD Vol-target 30%:
   - KCM QLD gate logic + vol-target sizing: weight = min(1.0, 0.30 / (2 * vol))
@@ -51,14 +50,11 @@ def w_kcm_qld(df):
     KCM QLD baseline strategy:
       1. SMA200 + SMA50 recovery gate
       2. Anti-whipsaw buffer: exit at QQQ < 0.99*SMA200, re-enter at QQQ > 1.01*SMA200
-      3. VIX spike re-entry: 100% when VIX > 35 & VIX < VIX_SMA10
-      4. RSI dip buy: 100% when RSI < 30 while out of position
-         (RSI/VIX are binary overlays; they do not set in_position)
+      3. RSI dip buy: 100% when RSI < 30 while out of position
+         (RSI is a binary overlay; it does not set in_position)
     """
     vs200 = df["qqq_vs_sma200"].fillna(0)
     vs50  = df["qqq_vs_sma50"].fillna(0)
-    vix   = df["vix_close"].ffill().fillna(20)
-    vix_sma10 = vix.rolling(10).mean()
     rsi   = df["rsi_14"].ffill().fillna(50)
 
     n = len(df)
@@ -67,20 +63,13 @@ def w_kcm_qld(df):
     w[0] = 1.0 if in_position else 0.0
 
     for i in range(1, n):
-        vix_reentry = (
-            vix.iloc[i] > 35 and
-            pd.notna(vix_sma10.iloc[i]) and
-            vix.iloc[i] < vix_sma10.iloc[i]
-        )
+        dip = rsi.iloc[i] < 30
 
         if in_position:
             # Exit: buffer -1% below SMA200 AND below SMA50
             if vs200.iloc[i] < -0.01 and vs50.iloc[i] < 0:
                 in_position = False
-                if vix_reentry or rsi.iloc[i] < 30:
-                    w[i] = 1.0
-                else:
-                    w[i] = 0.0
+                w[i] = 1.0 if dip else 0.0
             else:
                 w[i] = 1.0
         else:
@@ -91,7 +80,7 @@ def w_kcm_qld(df):
             elif vs50.iloc[i] >= 0:
                 in_position = True
                 w[i] = 1.0
-            elif vix_reentry or rsi.iloc[i] < 30:
+            elif dip:
                 w[i] = 1.0
             else:
                 w[i] = 0.0
@@ -106,8 +95,6 @@ def w_kcm_qld_voltarget(df, target_vol=TARGET_VOL):
     """
     vs200 = df["qqq_vs_sma200"].fillna(0)
     vs50  = df["qqq_vs_sma50"].fillna(0)
-    vix   = df["vix_close"].ffill().fillna(20)
-    vix_sma10 = vix.rolling(10).mean()
     rsi   = df["rsi_14"].ffill().fillna(50)
     rv    = df["realized_vol_20d"].ffill().fillna(0.20)
 
@@ -117,11 +104,7 @@ def w_kcm_qld_voltarget(df, target_vol=TARGET_VOL):
     w[0] = 1.0 if in_position else 0.0
 
     for i in range(1, n):
-        vix_reentry = (
-            vix.iloc[i] > 35 and
-            pd.notna(vix_sma10.iloc[i]) and
-            vix.iloc[i] < vix_sma10.iloc[i]
-        )
+        dip = rsi.iloc[i] < 30
 
         # Vol-target sizing
         qld_vol = 2.0 * rv.iloc[i]
@@ -130,10 +113,7 @@ def w_kcm_qld_voltarget(df, target_vol=TARGET_VOL):
         if in_position:
             if vs200.iloc[i] < -0.01 and vs50.iloc[i] < 0:
                 in_position = False
-                if vix_reentry or rsi.iloc[i] < 30:
-                    w[i] = vt_w
-                else:
-                    w[i] = 0.0
+                w[i] = vt_w if dip else 0.0
             else:
                 w[i] = vt_w
         else:
@@ -143,7 +123,7 @@ def w_kcm_qld_voltarget(df, target_vol=TARGET_VOL):
             elif vs50.iloc[i] >= 0:
                 in_position = True
                 w[i] = vt_w
-            elif vix_reentry or rsi.iloc[i] < 30:
+            elif dip:
                 w[i] = vt_w
             else:
                 w[i] = 0.0
@@ -271,7 +251,7 @@ def run(start=DEFAULT_START, end=None):
              alpha=0.6, label="KCM VT30% weight")
 
     ax3.axhline(1.0, color="#ffffff", lw=0.6, ls="--", alpha=0.3, label="100%")
-    ax3.axhline(1.0, color="#ff8844", lw=0.5, ls=":", alpha=0.2, label="100% (RSI/VIX)")
+    ax3.axhline(1.0, color="#ff8844", lw=0.5, ls=":", alpha=0.2, label="100% (RSI dip)")
 
     ax3.set_ylabel("QLD\nWeight", color=TXT, fontsize=9)
     ax3.set_ylim(-0.05, 1.12)

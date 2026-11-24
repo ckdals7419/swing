@@ -1,8 +1,9 @@
 """
-Find historical analogs of: regime just turned OFF + SMA-RSI<26 + VIX spike,
+Find historical analogs of: regime just turned OFF + SMA-RSI<26 (+ optional VIX spike filter),
 then compare policies over the following days (VT25 as optional overlay).
 
-Signal: ^NDX (1990+, VIX available). Vehicle: synthetic 3x NDX, spliced to real TQQQ.
+Baseline KCM temp hold is RSI-only (VIX temp hold removed).
+Signal: ^NDX (1990+). Vehicle: synthetic 3x NDX, spliced to real TQQQ.
 Signal at T close -> trade at T+1 open.
 """
 from __future__ import annotations
@@ -55,15 +56,14 @@ def build() -> pd.DataFrame:
 
 def kcm(df: pd.DataFrame, temp_buys: bool = True) -> tuple[pd.Series, pd.Series]:
     vs200, vs50 = df["vs200"].fillna(0), df["vs50"].fillna(0)
-    rsi, vx, vx10 = df["rsi"].fillna(50), df["vix"], df["vix10"]
+    rsi = df["rsi"].fillna(50)
     n = len(df)
     w = np.zeros(n)
     st = np.zeros(n, dtype=bool)
     inp = bool(vs200.iloc[0] >= 0)
     w[0], st[0] = float(inp), inp
     for i in range(1, n):
-        vr = bool(pd.notna(vx10.iloc[i]) and vx.iloc[i] > 35 and vx.iloc[i] < vx10.iloc[i])
-        temp = temp_buys and (vr or rsi.iloc[i] < RSI_DIP)
+        temp = temp_buys and (rsi.iloc[i] < RSI_DIP)
         if inp:
             if vs200.iloc[i] < -BUF and vs50.iloc[i] < 0:
                 inp = False

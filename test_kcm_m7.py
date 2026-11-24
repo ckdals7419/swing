@@ -90,19 +90,17 @@ def kcm_hold():
     inp = vs200[0] >= 0
     w[0] = 1.0 if inp else 0.0
     for i in range(1, n):
-        has_vix = not np.isnan(vix_v[i]) and not np.isnan(vix_sma10_v[i])
-        vr = has_vix and vix_v[i] > 35 and vix_v[i] < vix_sma10_v[i]
+        dip = rsi_v[i] < 30
         if inp:
             if vs200[i] < -0.01 and vs50[i] < 0:
                 inp = False
-                if vr or rsi_v[i] < 30: w[i] = 1.0
-                else: w[i] = 0.0
+                w[i] = 1.0 if dip else 0.0
             else:
                 w[i] = 1.0
         else:
             if vs200[i] >= 0.01: inp = True; w[i] = 1.0
             elif vs50[i] >= 0: inp = True; w[i] = 1.0
-            elif vr or rsi_v[i] < 30: w[i] = 1.0
+            elif dip: w[i] = 1.0
             else: w[i] = 0.0
     return pd.Series(w, index=idx)
 
@@ -113,13 +111,11 @@ def kcm_rsi_swing(sell_rsi, buy_rsi):
     swing_out = False
     w[0] = 1.0 if in_regime else 0.0
     for i in range(1, n):
-        has_vix = not np.isnan(vix_v[i]) and not np.isnan(vix_sma10_v[i])
-        vr = has_vix and vix_v[i] > 35 and vix_v[i] < vix_sma10_v[i]
+        dip = rsi_v[i] < 30
         if in_regime:
             if vs200[i] < -0.01 and vs50[i] < 0:
                 in_regime = False; swing_out = False
-                if vr or rsi_v[i] < 30: w[i] = 1.0
-                else: w[i] = 0.0
+                w[i] = 1.0 if dip else 0.0
             elif swing_out:
                 if rsi_v[i] < buy_rsi: swing_out = False; w[i] = 1.0
                 else: w[i] = 0.0
@@ -129,7 +125,7 @@ def kcm_rsi_swing(sell_rsi, buy_rsi):
         else:
             if vs200[i] >= 0.01: in_regime = True; swing_out = False; w[i] = 1.0
             elif vs50[i] >= 0: in_regime = True; swing_out = False; w[i] = 1.0
-            elif vr or rsi_v[i] < 30: w[i] = 1.0
+            elif dip: w[i] = 1.0
             else: w[i] = 0.0
     return pd.Series(w, index=idx)
 

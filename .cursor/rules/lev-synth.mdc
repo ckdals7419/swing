@@ -29,7 +29,10 @@ add preset, check `_report`. Note USD (2x semis) tracks DJ US Semis, not SMH.
 
 # Backtest defaults (`kcm_sim.simulate`)
 
-- Signal on close; SMA fills next open, RSI/VIX LOC; intraday stops only for comparison.
+- Official **KCM** = daily swing, QQQ/NDX signal → TQQQ only. Other indices (SMH/USD, SOXL, UPRO) are research only.
+- Flat cash = foreign-currency RP at 3.45% (no GLD/park overlay).
+- Signal on close; SMA fills next open, RSI temp hold LOC; intraday stops only for comparison.
+- Baseline temp hold = SMA-RSI&lt;26 only (VIX temp hold removed).
 - Korean overseas CGT 22% (2.5M KRW deduction), cash RP 3.45%, 9 bps cost.
-- Overheat trim on (vs200 > 15% → 50%, < 10% restore).
+- Overheat trim on (vs200 > 15% → 25%, < 5% restore).
 - Save experiment grids to `results_*.csv` and summarize in README.

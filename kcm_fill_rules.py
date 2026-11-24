@@ -6,9 +6,10 @@ Fill timing depends on *why* weight changed:
 
   Price-level triggers (observable intraday):
     SMA200 진입/탈출, SMA50 진입/탈출  → intraday touch
-  Close-confirmed triggers (RSI / VIX):
-    RSI·VIX 진입/탈출             → LOC (same close)
+  Close-confirmed triggers (RSI):
+    RSI 진입/탈출                 → LOC (same close)
     (다음날 시가도 허용; 기본은 LOC)
+    VIX 임시보유는 기준 규칙에서 제거됨.
 
 레짐 청산은 항상 SMA200-1% AND SMA50 동시 미만.
 다만 *어느 레벨이 마지막에 깨졌는지*로 체결가를 나눔:
@@ -23,7 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from notify_kcm_telegram import BUF, RSI_DIP, VIX_TH, rsi_sma, vt_scale
+from notify_kcm_telegram import BUF, RSI_DIP, rsi_sma, vt_scale
 
 COST_BPS_DEFAULT = 9.0
 LEV_DEFAULT = 3.0
@@ -36,9 +37,7 @@ FILL_RULES: dict[str, str] = {
     "SMA50탈출": "intraday",
     "SMA동시탈출": "intraday",
     "RSI진입": "loc",
-    "VIX진입": "loc",
     "RSI탈출": "loc",
-    "VIX탈출": "loc",
 }
 
 
@@ -57,17 +56,19 @@ def classify_transitions(
     vix: pd.Series,
     *,
     rsi_th: float = RSI_DIP,
-    vix_th: float = VIX_TH,
+    vix_th: float | None = None,  # ignored; kept for call-site compat
     buf: float = BUF,
 ) -> tuple[pd.Series, pd.Series, list[FillEvent]]:
-    """Return (weight 0/1, regime_on, fill events on change days)."""
+    """Return (weight 0/1, regime_on, fill events on change days).
+
+    Temp hold = SMA-RSI dip only. VIX temp hold removed from baseline.
+    """
+    _ = vix, vix_th
     sma50 = close.rolling(50).mean()
     sma200 = close.rolling(200).mean()
     vs200 = (close / sma200 - 1).fillna(0)
     vs50 = (close / sma50 - 1).fillna(0)
     rsi = rsi_sma(close).ffill().fillna(50)
-    vv = vix.reindex(close.index).ffill()
-    vx10 = vv.rolling(10).mean()
 
     n = len(close)
     w = np.zeros(n)
@@ -79,8 +80,6 @@ def classify_transitions(
     inp_a[0] = inp
 
     for i in range(1, n):
-        has = pd.notna(vv.iloc[i]) and pd.notna(vx10.iloc[i])
-        vr = bool(has and vv.iloc[i] > vix_th and vv.iloc[i] < vx10.iloc[i])
         dip = float(rsi.iloc[i]) < rsi_th
         prev_w = w[i - 1]
         reason = ""
@@ -88,7 +87,7 @@ def classify_transitions(
         if inp:
             if vs200.iloc[i] < -buf and vs50.iloc[i] < 0:
                 inp = False
-                if vr or dip:
+                if dip:
                     w[i] = 1.0
                     # regime off but immediate temp hold — no cash exit event;
                     # weight stays 1 (ON→temp). Tag only if we need audit.
@@ -110,28 +109,13 @@ def classify_transitions(
                 inp = True
                 w[i] = 1.0
                 reason = "SMA200진입" if vs200.iloc[i] >= buf else "SMA50진입"
-            elif vr or dip:
+            elif dip:
                 w[i] = 1.0
-                if dip and vr:
-                    reason = "RSI진입"  # dual: treat as RSI for fill rule (both use loc)
-                elif dip:
-                    reason = "RSI진입"
-                else:
-                    reason = "VIX진입"
+                reason = "RSI진입"
             else:
                 w[i] = 0.0
                 if prev_w >= 0.5:
-                    prev_dip = float(rsi.iloc[i - 1]) < rsi_th
-                    prev_has = pd.notna(vv.iloc[i - 1]) and pd.notna(vx10.iloc[i - 1])
-                    prev_vr = bool(
-                        prev_has
-                        and vv.iloc[i - 1] > vix_th
-                        and vv.iloc[i - 1] < vx10.iloc[i - 1]
-                    )
-                    if prev_vr and not prev_dip:
-                        reason = "VIX탈출"
-                    else:
-                        reason = "RSI탈출"
+                    reason = "RSI탈출"
 
         inp_a[i] = inp
         if abs(w[i] - prev_w) > 0.5 and reason in FILL_RULES:

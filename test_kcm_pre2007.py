@@ -123,8 +123,6 @@ print(f"\nDataset: {df.index[0].date()} -> {df.index[-1].date()} ({len(df):,} da
 def w_kcm(df):
     vs200 = df["qqq_vs_sma200"].fillna(0)
     vs50  = df["qqq_vs_sma50"].fillna(0)
-    vix   = df["vix_close"].ffill().fillna(20)
-    vix_sma10 = vix.rolling(10).mean()
     rsi   = df["rsi_14"].ffill().fillna(50)
 
     n = len(df)
@@ -133,19 +131,17 @@ def w_kcm(df):
     w[0] = 1.0 if in_position else 0.0
 
     for i in range(1, n):
-        has_vix = not np.isnan(vix.iloc[i]) and pd.notna(vix_sma10.iloc[i])
-        vix_reentry = has_vix and vix.iloc[i] > 35 and vix.iloc[i] < vix_sma10.iloc[i]
+        dip = rsi.iloc[i] < 30
         if in_position:
             if vs200.iloc[i] < -0.01 and vs50.iloc[i] < 0:
                 in_position = False
-                if vix_reentry or rsi.iloc[i] < 30: w[i] = 1.0
-                else: w[i] = 0.0
+                w[i] = 1.0 if dip else 0.0
             else:
                 w[i] = 1.0
         else:
             if vs200.iloc[i] >= 0.01: in_position = True; w[i] = 1.0
             elif vs50.iloc[i] >= 0: in_position = True; w[i] = 1.0
-            elif vix_reentry or rsi.iloc[i] < 30: w[i] = 1.0
+            elif dip: w[i] = 1.0
             else: w[i] = 0.0
 
     return pd.Series(w, index=df.index)

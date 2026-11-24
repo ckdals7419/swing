@@ -1,7 +1,7 @@
 """
 KCM on SOXX → SOXL vs QQQ/NDX → TQQQ (same rules).
 
-Defaults: SMA next-open, RSI/VIX LOC, overheat trim 50%, tax, RP 3.45%, 9bps.
+Defaults: SMA next-open, RSI temp LOC, overheat trim 50%, tax, RP 3.45%, 9bps.
 
 Usage:
   python backtest_kcm_soxl.py

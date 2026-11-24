@@ -107,27 +107,23 @@ def w_base(df: pd.DataFrame, *, vt_target: float | None = None) -> pd.Series:
 
 
 def w_h_confirm(df: pd.DataFrame, days: int = 3) -> pd.Series:
-    close, vix = df["sig_close"], df["vix"]
+    close = df["sig_close"]
     vs200 = (close / close.rolling(200).mean() - 1).fillna(0)
     vs50 = (close / close.rolling(50).mean() - 1).fillna(0)
     rsi = rsi_sma(close).ffill().fillna(50)
-    vx = vix.reindex(close.index, method="ffill")
-    vx10 = vx.rolling(10).mean()
     n = len(close)
     w = np.zeros(n)
     inp = bool(vs200.iloc[0] >= 0)
     streak = 0
     w[0] = 1.0 if inp else 0.0
     for i in range(1, n):
-        has = pd.notna(vx.iloc[i]) and pd.notna(vx10.iloc[i])
-        vr = bool(has and vx.iloc[i] > 35 and vx.iloc[i] < vx10.iloc[i])
         dip = float(rsi.iloc[i]) < RSI_DIP
         entry = vs200.iloc[i] >= BUF or vs50.iloc[i] >= 0
         if inp:
             if vs200.iloc[i] < -BUF and vs50.iloc[i] < 0:
                 inp = False
                 streak = 0
-                w[i] = 1.0 if (vr or dip) else 0.0
+                w[i] = 1.0 if dip else 0.0
             else:
                 w[i] = 1.0
         else:
@@ -135,7 +131,7 @@ def w_h_confirm(df: pd.DataFrame, days: int = 3) -> pd.Series:
             if streak >= days:
                 inp = True
                 w[i] = 1.0
-            elif vr or dip:
+            elif dip:
                 w[i] = 1.0
             else:
                 w[i] = 0.0

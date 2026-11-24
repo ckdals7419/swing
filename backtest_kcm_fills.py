@@ -132,7 +132,7 @@ def main_legacy() -> None:
 
     for vt_name, vt in [("VT없음", None), ("VT25", 0.25)]:
         print("\n" + "=" * 110)
-        print(f"KCM SMA-RSI26+VIX | {vt_name} | {COST:.0f}bps | 3x→TQQQ")
+        print(f"KCM SMA-RSI26 | {vt_name} | {COST:.0f}bps | 3x→TQQQ")
         print("=" * 110)
         print(f"{'구간':<10}", end="")
         for lab, _ in modes:

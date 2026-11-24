@@ -2,7 +2,7 @@
 Overextension trim test: SMA200 위 과열 시 현금 비중 확대.
 
 All rules are decided on signal close (QQQ/NDX) and executed next open
-(rebalance when target moves >= 10%p). Base: SMA 시가 · RSI/VIX LOC, 세후,
+(rebalance when target moves >= 10%p). Base: SMA 시가 · RSI 임시 LOC, 세후,
 현금 RP 3.45% (`kcm_sim.CASH_RATE`).
 
 Selection: IS 2000-2012 → OOS 2013+.

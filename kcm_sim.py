@@ -3,7 +3,7 @@ Realistic KCM execution simulator with Korean overseas-stock tax.
 
 Fill per category (sma_fill × temp_fill)
   sma_fill   intraday / loc / next_open  — SMA200·SMA50 레짐 전환
-  temp_fill  loc / next_open             — RSI·VIX 임시보유 전환
+  temp_fill  loc / next_open             — RSI 임시보유 전환
   (레짐 전환과 임시보유가 겹쳐 실제 매매가 없으면 체결도 없음)
 
   intraday   SMA 레벨은 실전 자동주문(감시주문)처럼 처리:
@@ -11,7 +11,7 @@ Fill per category (sma_fill × temp_fill)
                - 진입: OFF 상태에서 고가 >= min(SMA200*(1+BUF), SMA50) → 터치 즉시 체결
                - 청산: ON 상태에서 저가 <= min(SMA200*(1-BUF), SMA50) → 터치 즉시 체결
                - 종가가 되돌아와도 체결 유지 (휩쏘 포함)
-             RSI/VIX 임시보유는 종가 확정 → LOC
+             RSI 임시보유는 종가 확정 → LOC
   loc        모든 신호를 당일 종가 판정 → 당일 종가 체결
   next_open  모든 신호를 당일 종가 판정 → 다음날 시가 체결
 
@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 from kcm_fill_rules import classify_transitions
-from notify_kcm_telegram import BUF, RSI_DIP, VIX_TH, rsi_sma, trim_scale, vt_scale
+from notify_kcm_telegram import BUF, RSI_DIP, rsi_sma, trim_scale, vt_scale
 
 TAX_RATE = 0.22
 TAX_DEDUCTION_KRW = 2_500_000
@@ -38,14 +38,10 @@ INITIAL_KRW = 100_000_000
 CASH_RATE = 0.0345  # 외화RP 연이율
 
 
-def _temp_hold(
-    close: pd.Series, vix: pd.Series, rsi_th: float, vix_th: float = VIX_TH
-) -> np.ndarray:
+def _temp_hold(close: pd.Series, rsi_th: float) -> np.ndarray:
+    """Regime-OFF temp hold: SMA-RSI dip only (VIX rule removed)."""
     rsi = rsi_sma(close).ffill().fillna(50)
-    vv = vix.reindex(close.index).ffill()
-    vx10 = vv.rolling(10).mean()
-    vr = (vv > vix_th) & (vv < vx10)
-    return ((rsi < rsi_th) | vr.fillna(False)).values
+    return (rsi < rsi_th).values
 
 
 def simulate(
@@ -68,7 +64,7 @@ def simulate(
     tax: bool = True,
     initial: float = INITIAL_KRW,
     rsi_th: float = RSI_DIP,
-    vix_th: float = VIX_TH,
+    vix_th: float | None = None,  # ignored; kept for call-site compat
     buf: float = BUF,
     trim: pd.Series | str | None = "default",
     trim_on: float | None = None,
@@ -80,7 +76,7 @@ def simulate(
     gap_abort_loc: bool = False,
     open_cancel_buy: str | None = None,
 ) -> dict:
-    """trim: close-decided exposure multiplier (0..1] while ON; rebalanced next open
+    """trim: close-decided exposure multiplier [0..1] while ON; rebalanced next open
     when target moves by >= rebal. "default" = trim_scale; None = no trim.
     open_cancel_buy: skip pending buy at open if already invalid —
       "sma200m1" / "exit" / "not_entry"."""
@@ -102,11 +98,10 @@ def simulate(
     vo = veh_o.reindex(idx).astype(float).values
     s50p = sig_c.rolling(50).mean().shift(1).values
     s200p = sig_c.rolling(200).mean().shift(1).values
-    temp = _temp_hold(sig_c, vix, rsi_th, vix_th=vix_th)
+    _ = vix_th  # deprecated; VIX temp hold removed from baseline
+    temp = _temp_hold(sig_c, rsi_th)
     vts = vt_scale(sig_c, target=vt_target).values if vt_target else np.ones(len(idx))
-    _, inp_close, _ = classify_transitions(
-        sig_c, vix, rsi_th=rsi_th, vix_th=vix_th, buf=buf
-    )
+    _, inp_close, _ = classify_transitions(sig_c, vix, rsi_th=rsi_th, buf=buf)
     inp_c = inp_close.values
     m = trim.reindex(idx).ffill().fillna(1.0).clip(0.0, 1.0).values if trim is not None else np.ones(len(idx))
     r_cash = cash_rate / 252.0

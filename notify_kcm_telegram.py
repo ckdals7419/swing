@@ -1,17 +1,15 @@
 """
 Daily KCM signal → Telegram.
 
-Reports:
-  1) SMH (USD) — signal from SMH itself
-  2) TQQQ      — signal from QQQ (not SMH)
+Reports TQQQ, signal from QQQ (KCM parameters are fit on NDX/QQQ only).
 
 Signal at T close → act at T+1 open.
 Run after US cash close (e.g. 06:30 KST next calendar day).
 
 KCM (baseline):
   - Regime: SMA200 ±1% buffer + SMA50
-  - Temp hold when regime OFF: SMA-RSI(14) < 26, or VIX>35 & falling vs 10d MA
-  - Overheat trim (default): vs200 > +15% → 50%, back to 100% when vs200 < +10%
+  - Temp hold when regime OFF: SMA-RSI(14) < 26 only (VIX temp hold removed)
+  - Overheat trim (default): vs200 > +15% → 25%, back to 100% when vs200 < +5%
   - VT25 vol-targeting is optional (--vt25)
 
 Env:
@@ -39,11 +37,10 @@ import yfinance as yf
 BUF = 0.01
 RSI_N = 14
 RSI_DIP = 26.0  # simple-average RSI threshold (regime-OFF temp hold)
-VIX_TH = 35.0
 VT_TARGET = 0.25
 TRIM_ON = 0.15  # vs200 above this → trim
-TRIM_OFF = 0.10  # vs200 below this → restore
-TRIM_W = 0.5
+TRIM_OFF = 0.05  # vs200 below this → restore
+TRIM_W = 0.25
 
 
 def rsi_sma(close: pd.Series, n: int = RSI_N) -> pd.Series:
@@ -104,7 +101,7 @@ def kcm_weights(
 ) -> tuple[pd.Series, pd.Series]:
     """Return (weight, in_position bool) aligned to close.index.
 
-    Signal weight is 0 or 1, times trim_scale (default on: 0.5 when overheated).
+    Signal weight is 0 or 1, times trim_scale (default on: TRIM_W when overheated).
     If vt_target is set (e.g. 0.25), also multiply by vt_scale (optional overlay).
     """
     sma50 = close.rolling(50).mean()
@@ -112,8 +109,7 @@ def kcm_weights(
     vs200 = (close / sma200 - 1).fillna(0)
     vs50 = (close / sma50 - 1).fillna(0)
     rsi = rsi_sma(close).ffill().fillna(50)
-    vx = vix.reindex(close.index, method="ffill")
-    vx10 = vx.rolling(10).mean()
+    # vix kept in signature for callers / display; not used in weight logic.
 
     n = len(close)
     w = np.zeros(n)
@@ -123,20 +119,18 @@ def kcm_weights(
     states[0] = inp
 
     for i in range(1, n):
-        has = pd.notna(vx.iloc[i]) and pd.notna(vx10.iloc[i])
-        vr = bool(has and vx.iloc[i] > VIX_TH and vx.iloc[i] < vx10.iloc[i])
         dip = float(rsi.iloc[i]) < rsi_th
         if inp:
             if vs200.iloc[i] < -BUF and vs50.iloc[i] < 0:
                 inp = False
-                w[i] = 1.0 if (vr or dip) else 0.0
+                w[i] = 1.0 if dip else 0.0
             else:
                 w[i] = 1.0
         else:
             if vs200.iloc[i] >= BUF or vs50.iloc[i] >= 0:
                 inp = True
                 w[i] = 1.0
-            elif vr or dip:
+            elif dip:
                 w[i] = 1.0
             else:
                 w[i] = 0.0
@@ -173,7 +167,6 @@ def reason_line(
     vs50: float,
     rsi: float,
     vix: float,
-    vix10: float,
     w: float,
     *,
     rsi_th: float = RSI_DIP,
@@ -188,14 +181,12 @@ def reason_line(
             bits.append("청산조건충족")
         if rsi < rsi_th:
             bits.append(f"RSI딥({rsi:.1f})")
-        if vix > VIX_TH and vix < vix10:
-            bits.append(f"VIXre({vix:.1f})")
     if hot:
         bits.append(f"과열트림({TRIM_W:.0%})")
     bits.append(f"vs200={vs200:+.1%}")
     bits.append(f"vs50={vs50:+.1%}")
     bits.append(f"SMA-RSI={rsi:.1f}")
-    bits.append(f"VIX={vix:.1f}")
+    bits.append(f"VIX={vix:.1f}")  # informational only
     bits.append(f"signal={w:.0%}")
     return " | ".join(bits)
 
@@ -232,7 +223,6 @@ def _snapshot(
     vs50 = float(close.iloc[i] / sma50.iloc[i] - 1)
     rsi = float(rsi_sma(close).iloc[i])
     vx = float(vix.reindex(close.index, method="ffill").iloc[i])
-    vx10 = float(vix.reindex(close.index, method="ffill").rolling(10).mean().iloc[i])
     in_pos = bool(inp.iloc[i])
 
     show = px_series.reindex(close.index, method="ffill") if px_series is not None else close
@@ -243,30 +233,24 @@ def _snapshot(
         "label": label,
         "px": px,
         "act": action_text(w_prev, w_now),
-        "why": reason_line(in_pos, vs200, vs50, rsi, vx, vx10, w_now, hot=hot),
+        "why": reason_line(in_pos, vs200, vs50, rsi, vx, w_now, hot=hot),
         "w": w_now,
     }
 
 
 def build_message(*, vt_target: float | None = None, trim: bool = True) -> str:
-    smh = load_close("SMH")
     qqq = load_close("QQQ")
     tqqq = load_close("TQQQ")
     vix_df = load_close("^VIX")
 
-    smh_c = smh["Close"].dropna()
     qqq_c = qqq["Close"].dropna()
     tqqq_c = tqqq["Close"].dropna()
     vix_c = vix_df["Close"].dropna()
 
-    smh_snap = _snapshot(smh_c, vix_c, "SMH USD", vt_target=vt_target, trim=trim)
     tqqq_snap = _snapshot(
         qqq_c, vix_c, "TQQQ (QQQ 신호)", px_series=tqqq_c, vt_target=vt_target, trim=trim
     )
-
-    d0 = smh_snap["date"].date()
-    d1 = tqqq_snap["date"].date()
-    date_line = f"{d0}" if d0 == d1 else f"SMH {d0} / QQQ {d1}"
+    date_line = f"{tqqq_snap['date'].date()}"
 
     vt_note = (
         f" | VT{int(vt_target * 100)} 옵션 ON (신호×vol scale)"
@@ -280,17 +264,13 @@ def build_message(*, vt_target: float | None = None, trim: bool = True) -> str:
     )
     lines = [
         f"KCM Daily  ({date_line})",
-        "기준: 각 신호 종가 → 다음날 시가 체결",
-        "",
-        f"[SMH USD]  신호=SMH  ${smh_snap['px']:.2f}",
-        f"  → {smh_snap['act']}",
-        f"  {smh_snap['why']}",
+        "기준: QQQ 종가 → 다음날 시가 체결",
         "",
         f"[TQQQ]  신호=QQQ  ${tqqq_snap['px']:.2f}",
         f"  → {tqqq_snap['act']}",
         f"  {tqqq_snap['why']}",
         "",
-        f"규칙: SMA200±1% + SMA50 | SMA-RSI<{RSI_DIP:.0f} or VIX>{VIX_TH:.0f}&하락 = 임시보유"
+        f"규칙: SMA200±1% + SMA50 | SMA-RSI<{RSI_DIP:.0f} = 임시보유 (VIX 임시보유 제거)"
         + trim_note
         + vt_note,
     ]

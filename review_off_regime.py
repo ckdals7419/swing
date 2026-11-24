@@ -1,7 +1,7 @@
 """
 Review KCM rules that act while the regime is OFF (below SMA200):
-  - SMA-RSI<26 temporary hold (baseline)
-  - VIX>35 & falling temporary hold
+  - SMA-RSI<26 temporary hold (baseline; VIX temp hold removed)
+  - Optional legacy VIX ablation variants
   - SMA50 re-entry (vs50 >= 0)
 
 Signal: ^NDX (1990+). Vehicle: synthetic 3x NDX spliced to real TQQQ (2010-02-11+).
@@ -25,7 +25,7 @@ COST = 9e-4
 class Rules:
     name: str
     rsi_th: float | None = RSI_DIP   # None disables RSI temp hold
-    vix_th: float | None = 35.0      # None disables VIX temp hold
+    vix_th: float | None = None      # None = off (baseline); set only for legacy ablation
     hold_days: int = 0               # keep temp hold at least N days once triggered
     rsi_exit: float | None = None    # keep temp hold until RSI >= this (None: exit when trigger ends)
     sma50_reentry: bool = True       # vs50 >= 0 re-enters regime
@@ -136,14 +136,14 @@ def main() -> None:
     scale = df["scale"].fillna(1.0)
 
     variants = [
-        Rules(f"기준 (SMA-RSI{RSI_DIP:.0f}+VIX35+SMA50재진입)"),
+        Rules(f"기준 (SMA-RSI{RSI_DIP:.0f}+SMA50재진입)"),
         Rules("임시매수 전부 없음", rsi_th=None, vix_th=None),
-        Rules("RSI만 (VIX 끔)", vix_th=None),
-        Rules("VIX만 (RSI 끔)", rsi_th=None),
         Rules("RSI<24", rsi_th=24),
         Rules("RSI<30", rsi_th=30),
-        Rules("VIX>30", vix_th=30),
-        Rules("VIX>40", vix_th=40),
+        Rules("legacy VIX>35만", rsi_th=None, vix_th=35),
+        Rules("legacy RSI+VIX35", vix_th=35),
+        Rules("legacy VIX>30", vix_th=30),
+        Rules("legacy VIX>40", vix_th=40),
         Rules("임시보유 최소 5일", hold_days=5),
         Rules("임시보유 최소 10일", hold_days=10),
         Rules("임시보유 RSI 40 회복까지", rsi_exit=40),

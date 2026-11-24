@@ -2,7 +2,9 @@
 KCM parameter sensitivity heatmaps (NDX→TQQQ, default fills/tax/RP/trim).
 
 Grids (baseline held fixed when not on axes):
-  RSI × VIX, trim_on × trim_w, trim_on × trim_gap, BUF 1D
+  RSI 1D, trim_on × trim_w, trim_on × trim_gap, BUF 1D
+
+VIX temp hold was removed from baseline; RSI×VIX grid retired.
 
 Usage:
   python backtest_kcm_sensitivity.py
@@ -17,7 +19,7 @@ import pandas as pd
 
 from backtest_kcm_fills import COST, build_vehicle
 from kcm_sim import CASH_RATE, simulate
-from notify_kcm_telegram import BUF, RSI_DIP, TRIM_OFF, TRIM_ON, TRIM_W, VIX_TH
+from notify_kcm_telegram import BUF, RSI_DIP, TRIM_OFF, TRIM_ON, TRIM_W
 
 OUT_CSV = "results_kcm_sensitivity.csv"
 OUT_DIR = Path("sensitivity_heatmaps")
@@ -73,45 +75,43 @@ def main() -> None:
     OUT_DIR.mkdir(exist_ok=True)
 
     rsi_vals = [20, 22, 24, 26, 28, 30, 32]
-    vix_vals = [25, 30, 35, 40, 45]
     ton_vals = [0.10, 0.12, 0.15, 0.18, 0.20, 0.25]
-    tw_vals = [0.3, 0.4, 0.5, 0.6, 0.7, 1.0]
+    tw_vals = [0.15, 0.25, 0.35, 0.5, 0.7, 1.0]
     gap_vals = [0.02, 0.03, 0.05, 0.07, 0.10]
     buf_vals = [0.0, 0.005, 0.01, 0.015, 0.02]
 
     for pname, ps, pe in PERIODS:
-        # --- RSI × VIX ---
-        cagr = np.full((len(rsi_vals), len(vix_vals)), np.nan)
-        mdd = np.full_like(cagr, np.nan)
+        # --- RSI 1D ---
+        cagr_r = np.full(len(rsi_vals), np.nan)
+        mdd_r = np.full(len(rsi_vals), np.nan)
         for i, rsi in enumerate(rsi_vals):
-            for j, vix in enumerate(vix_vals):
-                r = run_one(data, start=ps, end=pe, rsi_th=rsi, vix_th=vix)
-                cagr[i, j], mdd[i, j] = r["cagr"], r["mdd"]
-                rows.append({"period": pname, "grid": "rsi_vix", "rsi": rsi, "vix": vix,
-                             "cagr": r["cagr"], "mdd": r["mdd"], "trades": r["trades"]})
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-        heatmap(axes[0], cagr, vix_vals, rsi_vals, f"{pname} CAGR  RSI×VIX", "{:.1%}",
-                vmin=np.nanmin(cagr), vmax=np.nanmax(cagr))
-        axes[0].set_xlabel("VIX th"); axes[0].set_ylabel("RSI th")
-        heatmap(axes[1], mdd, vix_vals, rsi_vals, f"{pname} MDD  RSI×VIX", "{:.0%}",
-                vmin=np.nanmin(mdd), vmax=np.nanmax(mdd), cmap="RdYlGn_r")
-        axes[1].set_xlabel("VIX th"); axes[1].set_ylabel("RSI th")
-        # mark baseline
-        for ax in axes:
-            ax.scatter([vix_vals.index(VIX_TH)], [rsi_vals.index(RSI_DIP)],
-                       s=80, facecolors="none", edgecolors="black", linewidths=1.5)
-        fig.suptitle(f"RSI×VIX | neighbor CAGR σ={neighbor_std(cagr):.2%} | baseline ●", fontsize=11)
+            r = run_one(data, start=ps, end=pe, rsi_th=rsi)
+            cagr_r[i], mdd_r[i] = r["cagr"], r["mdd"]
+            rows.append({"period": pname, "grid": "rsi", "rsi": rsi,
+                         "cagr": r["cagr"], "mdd": r["mdd"], "trades": r["trades"]})
+        fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+        axes[0].plot(rsi_vals, cagr_r, "o-", color="#2a6")
+        axes[0].axvline(RSI_DIP, color="black", ls="--", lw=1)
+        axes[0].set_title(f"{pname} CAGR  RSI th")
+        axes[0].set_xlabel("RSI th"); axes[0].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+        axes[1].plot(rsi_vals, mdd_r, "o-", color="#c33")
+        axes[1].axvline(RSI_DIP, color="black", ls="--", lw=1)
+        axes[1].set_title(f"{pname} MDD  RSI th")
+        axes[1].set_xlabel("RSI th"); axes[1].yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.0%}"))
+        fig.suptitle(f"RSI 1D | baseline RSI={RSI_DIP:.0f} (VIX temp hold removed)", fontsize=11)
         fig.tight_layout()
-        fig.savefig(OUT_DIR / f"rsi_vix_{pname}.png", dpi=140)
+        fig.savefig(OUT_DIR / f"rsi_{pname}.png", dpi=140)
         plt.close(fig)
-        print(f"RSI×VIX {pname}: CAGR σ_nb={neighbor_std(cagr):.2%}  base={cagr[rsi_vals.index(RSI_DIP), vix_vals.index(VIX_TH)]:+.1%}")
+        base_i = rsi_vals.index(RSI_DIP)
+        print(f"RSI {pname}: base={cagr_r[base_i]:+.1%}  range={np.nanmin(cagr_r):+.1%}..{np.nanmax(cagr_r):+.1%}")
 
         # --- trim_on × trim_w ---
         cagr = np.full((len(ton_vals), len(tw_vals)), np.nan)
         mdd = np.full_like(cagr, np.nan)
         for i, ton in enumerate(ton_vals):
             for j, tw in enumerate(tw_vals):
-                toff = ton - 0.05 if ton - 0.05 > 0 else ton / 2
+                gap = TRIM_ON - TRIM_OFF
+                toff = ton - gap if ton - gap > 0 else ton / 2
                 if tw >= 0.999:
                     r = run_one(data, start=ps, end=pe, trim=None)
                 else:

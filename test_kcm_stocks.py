@@ -99,19 +99,17 @@ def test_stock(ticker, name, sector):
     inp = vs200[0] >= 0
     w_h[0] = 1.0 if inp else 0.0
     for i in range(1, n):
-        has_vix = not np.isnan(vix_v[i]) and not np.isnan(vix_s[i])
-        vr = has_vix and vix_v[i] > 35 and vix_v[i] < vix_s[i]
+        dip = rsi_v[i] < 30
         if inp:
             if vs200[i] < -0.01 and vs50[i] < 0:
                 inp = False
-                if vr or rsi_v[i] < 30: w_h[i] = 1.0
-                else: w_h[i] = 0.0
+                w_h[i] = 1.0 if dip else 0.0
             else:
                 w_h[i] = 1.0
         else:
             if vs200[i] >= 0.01: inp = True; w_h[i] = 1.0
             elif vs50[i] >= 0: inp = True; w_h[i] = 1.0
-            elif vr or rsi_v[i] < 30: w_h[i] = 1.0
+            elif dip: w_h[i] = 1.0
             else: w_h[i] = 0.0
     w_hold = pd.Series(w_h, index=idx)
 
@@ -121,13 +119,11 @@ def test_stock(ticker, name, sector):
     swing_out = False
     w_s[0] = 1.0 if in_regime else 0.0
     for i in range(1, n):
-        has_vix = not np.isnan(vix_v[i]) and not np.isnan(vix_s[i])
-        vr = has_vix and vix_v[i] > 35 and vix_v[i] < vix_s[i]
+        dip = rsi_v[i] < 30
         if in_regime:
             if vs200[i] < -0.01 and vs50[i] < 0:
                 in_regime = False; swing_out = False
-                if vr or rsi_v[i] < 30: w_s[i] = 1.0
-                else: w_s[i] = 0.0
+                w_s[i] = 1.0 if dip else 0.0
             elif swing_out:
                 if rsi_v[i] < 50: swing_out = False; w_s[i] = 1.0
                 else: w_s[i] = 0.0
@@ -137,7 +133,7 @@ def test_stock(ticker, name, sector):
         else:
             if vs200[i] >= 0.01: in_regime = True; swing_out = False; w_s[i] = 1.0
             elif vs50[i] >= 0: in_regime = True; swing_out = False; w_s[i] = 1.0
-            elif vr or rsi_v[i] < 30: w_s[i] = 1.0
+            elif dip: w_s[i] = 1.0
             else: w_s[i] = 0.0
     w_swing = pd.Series(w_s, index=idx)
 
